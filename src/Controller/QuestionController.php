@@ -3,8 +3,10 @@
 namespace App\Controller;
 
 use App\Entity\Question;
+use App\Repository\QuestionRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 
@@ -13,10 +15,16 @@ class QuestionController extends AbstractController
     /**
      * @Route("/",name="app_homepage")
      */
-    public function homepage()
+    public function homepage(QuestionRepository $repository)
     {
-        return $this->render('question/homepage.html.twig');
-        //return new Response('What a bewitching controller we have conjured!');
+        //$repository = $entityManager->getRepository(Question::class);
+        //$questions = $repository->findAll();
+        //$questions = $repository->findBy([], ['askedAt' => 'DESC']);
+        $questions = $repository->findAllAskedOrderedByNewest();
+
+        return $this->render('question/homepage.html.twig', [
+            'questions' => $questions,
+        ]);
     }
     /**
      * @Route("/questions/new")
@@ -39,6 +47,7 @@ EOF
         if (rand(1, 10) > 2) {
             $question->setAskedAt(new \DateTime(sprintf('-%d days', rand(1, 100))));
         }
+        $question->setVotes(rand(-20, 50));
         $entityManager->persist($question);
         $entityManager->flush();
         return new Response(sprintf(
@@ -53,7 +62,7 @@ EOF
     public function show($slug,EntityManagerInterface $entityManager)
     {
         $repository = $entityManager->getRepository(Question::class);
-        $question = $repository->findOneBy(['slug' => $slug]);
+        //$question = $repository->findOneBy(['slug' => $slug]);
         $question = $repository->findOneBy(['slug' => $slug]);
         if (!$question) {
             throw $this->createNotFoundException(sprintf('no question found for slug "%s"', $slug));
@@ -65,9 +74,25 @@ EOF
             'Maybe... try saying the spell backwards?',
         ];
         return $this->render('question/show.html.twig',[
-                'question' => $slug,
+                'question' => $question,
                 'answers' => $answers,
         ]);
         //return new Response(sprintf('Future page to show a question "%s"!',$slug));
+    }
+    /**
+     * @Route("/questions/{slug}/vote", name="app_question_vote", methods="POST")
+     */
+    public function questionVote(Question $question,Request $request, EntityManagerInterface $entityManager)
+    {
+        $direction = $request->request->get('direction');
+        if ($direction === 'up') {
+            $question->upVote();
+        } elseif ($direction === 'down') {
+            $question->downVote();
+        }
+        $entityManager->flush();
+        return $this->redirectToRoute('app_question_show', [
+            'slug' => $question->getSlug()
+        ]);
     }
 }
